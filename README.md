@@ -3,8 +3,9 @@
 [`@antfu-collective/ni`](https://github.com/antfu-collective/ni) の `nr`（package.json の
 script ランナー）を Rust で再実装する**個人練習プロジェクト**。
 
-> Phase 0〜3 まで実装済み。`rnr <script>` / 引数なしの fuzzy 選択 / `rnr -` /
-> volta・mise 解決まで動く。npm 配布（Phase 4）は未着手。
+> Phase 0〜4 まで実装済み。`rnr <script>` / 引数なしの fuzzy 選択 / `rnr -` /
+> volta・mise 解決が動き、npm 配布構造（optionalDependencies + bin shim）も
+> 1ターゲット（darwin-arm64）で組んである。publish は未実施。
 
 ## なぜ作るか
 
@@ -44,8 +45,9 @@ cargo install --path . --force   # コード更新後に入れ直す
 cargo uninstall rnr              # アンインストール
 ```
 
-> npm 配布（`npm i -g` 形式）は Phase 4 で別途用意する予定。これは自分の
-> マシンで使うためのインストール方法。
+> これは自分のマシンで使うためのインストール方法。`pnpm add github:...` のような
+> GitHub 直インストールは現状は不可（ルートに package.json が無く、npm パッケージは
+> `npm/` 配下にあり、バイナリも未公開のため）。他人に配るなら下記の npm 配布が必要。
 
 ## 使い方
 
@@ -69,6 +71,36 @@ cargo build --release   # release ビルド（target/release/rnr）
 
 `fixtures/` に各 package manager の lockfile を置いたお試し用プロジェクトがある。
 詳細は [fixtures/README.md](./fixtures/README.md)。
+
+開発中に出た疑問（serde / anyhow / shim の仕組みなど）は [build-log.md](./build-log.md) に記録。
+
+## npm 配布の構造（Phase 4）
+
+esbuild / oxlint 方式の「optionalDependencies + bin shim」を1ターゲットで再現したもの。
+
+```
+npm/
+├── rnr/                       # 本体パッケージ
+│   ├── package.json           #   optionalDependencies で各プラットフォームを参照
+│   └── bin/rnr.js             #   shim: require.resolve で実バイナリを解決して spawn
+└── platforms/
+    └── darwin-arm64/          # @rnr/darwin-arm64
+        ├── package.json       #   os/cpu 指定（合致環境でだけ install される）
+        └── rnr                #   release バイナリ（gitignore。下記で配置）
+```
+
+ローカルで結線して試す:
+
+```sh
+cargo build --release
+cp target/release/rnr npm/platforms/darwin-arm64/rnr   # バイナリを配置
+npm pack ./npm/platforms/darwin-arm64                  # → tーボール
+npm pack ./npm/rnr                                     # → tーボール
+# 消費側プロジェクトで両 tーボールを install すると node_modules/.bin/rnr が使える
+```
+
+実際の `npm i -g rnr` では、shim → Rust バイナリ → 各 PM の3段で stdio 継承・exit code 透過が通る。
+publish はしていない（やるなら手動 1 回）。
 
 ## ライセンス
 
