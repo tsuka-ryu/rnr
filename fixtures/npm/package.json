@@ -1,0 +1,7 @@
+{
+  "name": "rnr-fixture-npm",
+  "private": true,
+  "scripts": {
+    "hello": "echo hi-from-npm"
+  }
+}

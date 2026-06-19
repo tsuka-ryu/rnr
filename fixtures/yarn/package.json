@@ -1,0 +1,7 @@
+{
+  "name": "rnr-fixture-yarn",
+  "private": true,
+  "scripts": {
+    "hello": "echo hi-from-yarn"
+  }
+}

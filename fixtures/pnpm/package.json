@@ -1,0 +1,9 @@
+{
+  "name": "rnr-fixture-pnpm",
+  "private": true,
+  "scripts": {
+    "hello": "echo hi-from-script",
+    "boom": "exit 7",
+    "args": "echo args:"
+  }
+}

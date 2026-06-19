@@ -28,3 +28,20 @@ Rust のエラーハンドリングを楽にするライブラリ（CLI/バイ�
 - `?` … 失敗時に関数を抜けてエラーを返す。異なる型のエラーも anyhow が自動変換
 - `.with_context(|| "...")` … エラーに人間向け説明を1枚かぶせる（`anyhow::Context` トレイト）
 - 対になる thiserror はライブラリ向け（呼び出し側がエラー種類で分岐したいとき）。rnr は CLI なので anyhow だけで足りる。
+
+### Q. runner.rs の意味がわからない
+組み立て済みの argv（例 `["pnpm","run","hello"]`）を別プロセスとして起動し、終了コードを返す関数。
+
+```rust
+let status = Command::new(&args[0]).args(&args[1..]).status()?;
+Ok(status.code().unwrap_or(1))
+```
+
+- `Command::new(&args[0])` … 起動するコマンド名（"pnpm"）。Command は「子プロセスの設定書（ビルダー）」で、new した時点ではまだ起動しない。
+- `.args(&args[1..])` … コマンド名以降の引数（["run","hello"]）を設定に足す。`[1..]` は index 1 以降のスライス。まだ起動しない。
+- `.status()?` … ここで初めて子プロセスが起動。
+  - stdio を親から継承する → 子の出力がそのまま端末に流れる（nr の挙動）。対比: `.output()` は出力を横取りして変数に溜める（画面に出ない）。
+  - 子が終わるまで待つ（ブロック）。
+  - 戻り値は `Result<ExitStatus, io::Error>`。失敗するのは「コマンドが見つからない」等の起動自体の失敗。`exit 7` で終わるのはエラーではない（起動は成功）。`?` で起動失敗だけ main に伝播。
+- `status.code().unwrap_or(1)` … 終了コードを Option<i32> で取得。シグナルで殺されると None になるので、その場合は慣例で 1。
+- これを main が `std::process::exit(code)` でそのまま rnr の終了コードにする = exit code 透過。

@@ -1,0 +1,7 @@
+{
+  "name": "rnr-fixture-bun",
+  "private": true,
+  "scripts": {
+    "hello": "echo hi-from-bun"
+  }
+}
