@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rnr::command::build_run_args;
+use rnr::command::{build_run_args, wrap_volta};
 use rnr::detect::{Agent, detect};
 
 // --- build_run_args（純粋関数。ファイル不要） ---
@@ -34,6 +34,38 @@ fn build_yarn() {
 fn build_bun() {
     let argv = build_run_args(Agent::Bun, "start", &[]);
     assert_eq!(argv, vec!["bun", "run", "start"]);
+}
+
+// --- wrap_volta（純粋関数。volta/mise の組み合わせ） ---
+
+#[test]
+fn wrap_volta_when_available_and_mise_inactive() {
+    // volta あり & mise 非active → volta run が前置される。
+    let argv = build_run_args(Agent::Pnpm, "build", &[]);
+    let wrapped = wrap_volta(argv, true, false);
+    assert_eq!(wrapped, vec!["volta", "run", "pnpm", "run", "build"]);
+}
+
+#[test]
+fn wrap_volta_skipped_when_mise_active() {
+    // volta あり & mise active → ラップしない（rnr 独自の挙動）。
+    let argv = build_run_args(Agent::Pnpm, "build", &[]);
+    let wrapped = wrap_volta(argv, true, true);
+    assert_eq!(wrapped, vec!["pnpm", "run", "build"]);
+}
+
+#[test]
+fn wrap_volta_skipped_when_volta_absent() {
+    let argv = build_run_args(Agent::Pnpm, "build", &[]);
+    let wrapped = wrap_volta(argv, false, false);
+    assert_eq!(wrapped, vec!["pnpm", "run", "build"]);
+}
+
+#[test]
+fn wrap_volta_skipped_when_volta_absent_and_mise_active() {
+    let argv = build_run_args(Agent::Pnpm, "build", &[]);
+    let wrapped = wrap_volta(argv, false, true);
+    assert_eq!(wrapped, vec!["pnpm", "run", "build"]);
 }
 
 // --- detect（一時ディレクトリに lockfile を置いて検証） ---
