@@ -14,14 +14,13 @@ pub enum Agent {
 /// どれも無ければ `Npm` にフォールバックする。
 /// 探索はカレントディレクトリ直下のみ（親ディレクトリへの遡りはまだしない）。
 pub fn detect(dir: &Path) -> Agent {
+    // package-lock.json → Npm はフォールバックと同じ結果になるので明示判定は省略。
     if dir.join("pnpm-lock.yaml").exists() {
         Agent::Pnpm
     } else if dir.join("yarn.lock").exists() {
         Agent::Yarn
     } else if dir.join("bun.lockb").exists() || dir.join("bun.lock").exists() {
         Agent::Bun
-    } else if dir.join("package-lock.json").exists() {
-        Agent::Npm
     } else {
         Agent::Npm
     }
