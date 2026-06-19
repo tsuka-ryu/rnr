@@ -103,6 +103,32 @@ CI のクロスビルド地獄（musl / win-msvc / マトリクス publish）は
 > フルマトリクス配布（全 OS/arch を CI でビルドして publish）は後回し。1 個組めれば残りは
 > "同じことを並べるだけ" なので、学習目的としては単一ターゲットで十分。
 
+実装した構造:
+
+```
+npm/
+├── rnr/                       # 本体パッケージ
+│   ├── package.json           #   optionalDependencies で各プラットフォームを参照
+│   └── bin/rnr.js             #   shim: require.resolve で実バイナリを解決して spawn
+└── platforms/
+    └── darwin-arm64/          # @rnr/darwin-arm64
+        ├── package.json       #   os/cpu 指定（合致環境でだけ install される）
+        └── rnr                #   release バイナリ（gitignore。下記で配置）
+```
+
+ローカルで結線して試す:
+
+```sh
+cargo build --release
+cp target/release/rnr npm/platforms/darwin-arm64/rnr   # バイナリを配置
+npm pack ./npm/platforms/darwin-arm64                  # → tーボール
+npm pack ./npm/rnr                                     # → tーボール
+# 消費側プロジェクトで両 tーボールを install すると node_modules/.bin/rnr が使える
+```
+
+実行は shim → Rust バイナリ → 各 PM の3段で、stdio 継承・exit code 透過が全段通る
+（詳細は [build-log.md](./build-log.md) の Phase 4）。publish は未実施。
+
 ## 参考
 
 - 移植元の仕様: [antfu-collective/ni `src/commands/nr.ts`](https://github.com/antfu-collective/ni/blob/main/src/commands/nr.ts)
