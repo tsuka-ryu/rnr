@@ -98,3 +98,34 @@ rnr build
 - 部品の公式 doc: npm package.json の os / cpu / optionalDependencies / bin
 - 実装例（実質の教科書）: esbuild（元祖、install.js に詳しいコメント）、oxc/oxlint（PLAN の参考元、npm/ 構成）、Biome（公式 doc で明文化）、swc
 - napi-rs は .node を require する N-API アドオン方式で、rnr の「単体バイナリを spawn」方式とは別物（混同注意）
+
+## Phase 5 — プロンプト表示を本家 nr に寄せる
+
+本家 nr のスクリプト選択 UI（`@posva/prompts` の autocomplete）と比べて、rnr（`inquire`）の見た目が
+劣る点を調べて寄せた。本家 `src/commands/nr.ts` は候補を `title: key` / `description: command` の
+2 フィールドで渡し、`limitText(description, terminalColumns - 15)` で切り詰めている。
+
+### Q. 長いコマンドが折り返して見にくい。どう直す？
+本家は `limitText(command, terminalColumns - 15)` で **固定 15 列ぶんを引いた幅に切り詰めて末尾に `…`** を付け、
+1 行に収めている。rnr も同じく `terminal_columns()`（crossterm で取得、非 TTY 時は 80）から
+固定 `RESERVED_COLUMNS = 15` を引いた幅で `limit_text` して折り返しを防ぐようにした（prompt.rs）。
+最初は key 長から都度計算する実装にしたが、本家どおり固定値に合わせた。
+
+### Q. スクロール上下記号（`^`/`v`）がわかりにくい。`↑`/`↓` にしたい
+これは `inquire` の制約ではなく **設定で変えられる**。`RenderConfig` の `scroll_up_prefix` /
+`scroll_down_prefix` を上書きすればよい。ベースは `RenderConfig::default()`（`NO_COLOR` を尊重）にして、
+この 2 つだけ `↑`/`↓` に差し替えた。
+
+### Q. 本家みたいに「名前は通常色＋コマンドだけ dim」の 2 色にできる？
+**できない（`inquire` の構造的制約）。** 行を 2 行に分けても無理。
+
+- `inquire` は **1 候補（option.value）まるごとに 1 つの stylesheet** しか当てない（backend.rs `print_option_value`）。
+  値に改行を入れて 2 行にしても全行が同じ 1 色になるだけ。候補ごとに名前とコマンドを別アイテムにすると
+  コマンド行まで選択対象になって壊れる。
+- ANSI エスケープを文字列に埋め込む裏技は、`inquire` が **生文字列の幅を `UnicodeWidthChar` で数える**
+  （frame_renderer.rs）ため ANSI バイトを可視幅にカウント → 折り返し誤判定・カーソルずれが起きる。
+- `inquire` には「候補 1 行を自分で描画するコールバック」が無い（カスタムできるのは確定後表示の `with_formatter` だけ）。
+
+→ 変えられるのは「行まるごと 1 色」まで（ハイライト色・全候補 dim・見出し色など RenderConfig で可）。
+本家の行内 2 色を再現したいなら `promkit` 等へのバックエンド差し替えが必要。今回は切り詰め＋スクロール記号までで一旦区切り、
+色分けは別タスク扱いとした。
