@@ -1,15 +1,34 @@
-// rnr — a Rust reimplementation of `nr` (from @antfu-collective/ni).
-// See PLAN.md for the roadmap. Implementation is intentionally left for you to fill in.
-//
-// Suggested module layout (create these as you go):
-//   mod detect;   // lockfile -> Agent
-//   mod package;  // read scripts from package.json
-//   mod command;  // Agent + script -> argv (+ volta/mise handling)
-//   mod runner;   // exec with inherited stdio, propagate exit code
-//   mod storage;  // lastRunCommand persistence
-//   mod prompt;   // interactive fuzzy script picker (Phase 2)
+// rnr — @antfu-collective/ni の `nr` を Rust で再実装する練習プロジェクト。
+// ロードマップは PLAN.md を参照。
 
-fn main() {
-    // TODO Phase 0: parse args -> detect agent -> read scripts -> run.
-    println!("rnr: not implemented yet — see PLAN.md");
+use std::process::exit;
+
+fn main() -> anyhow::Result<()> {
+    // 先頭の実行ファイル名を捨てて残りの引数を集める。
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    // 引数なし → 対話選択は Phase 2。今は使い方を出して終了。
+    let Some((script, extra)) = args.split_first() else {
+        eprintln!("rnr: 実行する script を指定してください（例: rnr build）");
+        exit(1);
+    };
+
+    let cwd = std::env::current_dir()?;
+
+    // lockfile から package manager を検出。
+    let agent = rnr::detect::detect(&cwd);
+
+    // package.json の scripts を読む。
+    let pkg = rnr::package::read(&cwd)?;
+
+    // 指定された script が存在しなければエラー終了。
+    if !pkg.scripts.contains_key(script) {
+        eprintln!("rnr: script '{script}' が package.json に見つかりません");
+        exit(1);
+    }
+
+    // <bin> run <script> [extra...] を組み立てて実行し、exit code を透過する。
+    let argv = rnr::command::build_run_args(agent, script, extra);
+    let code = rnr::runner::run(&argv)?;
+    exit(code);
 }
