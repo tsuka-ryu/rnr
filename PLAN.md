@@ -6,14 +6,19 @@ Rust で再実装する**個人練習プロジェクト**。
 目的は実用ツールで本家を置き換えることではなく、
 
 1. Rust の言語そのもの（所有権 / `Result` / `match` / 文字列の取り回し）に慣れる
-2. **Rust製CLIを npm エコシステムへ配布する**実務パターン（oxlint / esbuild 方式）を一周組む
+2. **Rust製CLIを npm エコシステムへ配布する**構造（oxlint / esbuild 方式）を理解する
 
 の2点を体で覚えること。
 
-> なぜ `nr` か: 仕様が明確で規模が小さく（本家で ~1,700行）、入力（lockfile + args）と
-> 出力（実行する argv）が決まっているので「期待コマンド == 実コマンド」のテストが書きやすい。
-> 一方で計算は軽い（lockfile を読んで exec するだけ）グルーコードなので、Rust の言語税は
-> 速度では回収しづらい——が、**練習ではその税金を払う過程自体が学びの本体**になる。
+## 進め方（このプロジェクトの作業前提）
+
+- **実装は本人が手で書く。** Claude（Opus）は実装コードを書かず、**ステップ単位の仕様だけ**を出す。
+- **細切りで進める。** 1 ステップぶんの仕様を渡す → 本人が書く → 見せてレビュー → 次へ、のリズム。
+  Phase をまとめて渡さない。
+- **Rust の文法ヒントは不要。** `match` / `Option` / 所有権などの
+  解説は省く。指示は「関数のシグネチャ・振る舞い・本家との差分・エッジケース」に絞る。
+- 各ステップは `cargo build` が通ることを確認してから次へ。
+- 見積もり: コア（Phase 0〜3）5〜7h + 軽量配布（Phase 4）0.5〜1h ≒ 計 6〜8h。
 
 ## `nr` の本質（移植する振る舞い）
 
@@ -40,9 +45,9 @@ rnr/
 │   ├── runner.rs     # std::process::Command で exec、exit code 透過
 │   ├── storage.rs    # lastRunCommand の保存/読み込み
 │   └── prompt.rs     # 対話 fuzzy 選択（Phase 2）
-└── npm/              # 配布レイヤー（Phase 4）
+└── npm/              # 配布レイヤー（Phase 4・軽量版）
     ├── rnr/          # 本体パッケージ（optionalDependencies + bin shim）
-    └── platforms/    # @rnr/<os>-<arch> を CI で生成
+    └── platforms/    # @rnr/<os>-<arch>（まずは自分の 1 ターゲットだけ）
 ```
 
 ### 依存（最小から）
@@ -52,7 +57,7 @@ rnr/
 | エラー | `anyhow` | Phase 0（導入済み） |
 | package.json パース | `serde` + `serde_json` | Phase 0（導入済み） |
 | 子プロセス exec | `std::process::Command` | 標準（依存なし） |
-| 引数パース | 最初は手書き `std::env::args` → 慣れたら `clap` | Phase 0 / 後で |
+| 引数パース | 手書き `std::env::args`（nr の引数処理は単純なので clap は基本不要） | Phase 0 |
 | 対話 fuzzy 選択 | `inquire`（fuzzy filter 内蔵の `Select`） | Phase 2 |
 
 > 最初は依存を `anyhow` + `serde` だけに絞り、言語そのものに集中する。
@@ -83,13 +88,20 @@ rnr/
 - mise active 判定は環境変数（`MISE_SHELL` / `__MISE_DIFF` など）で
 - **ゴール**: volta が入っていても mise を使っていれば volta に横取りされない
 
-### Phase 4 — npm 配布（oxlint / esbuild 方式）
-- GitHub Actions で各ターゲットをビルド: mac arm64/x64・linux x64/arm64（gnu + musl）・win x64(msvc)
-  - linux クロス / musl は `cargo-zigbuild` か `cross`
-- 各バイナリを `@rnr/<os>-<arch>` として publish（各 package.json に `os` / `cpu` を指定 → 非該当は自動スキップ）
-- 本体 `rnr` パッケージが全部を `optionalDependencies`、`bin` の shim が該当バイナリを
-  `require.resolve` して exec
-- **ゴール**: `npm i -g rnr` で実機に該当バイナリ 1 個だけ落ちる、を体験
+### Phase 4 — npm 配布の「仕組み」を軽量に再現（oxlint / esbuild 方式）
+
+CI のクロスビルド地獄（musl / win-msvc / マトリクス publish）は**やらない**。
+試行錯誤コストが高く、Rust 力では短縮できないため。配布の**構造を手で1周組む**ことだけを目的にする。
+
+- **ローカルの自分のターゲットだけビルド**: `cargo build --release`（例: mac arm64 の 1 個）
+- その 1 バイナリを `@rnr/<os>-<arch>` パッケージの形に置く（package.json に `os` / `cpu` を指定）
+- 本体 `rnr` パッケージが `optionalDependencies` で参照、`bin` の shim が該当バイナリを
+  `require.resolve` して exec する**構造を手で組む**
+- **ゴール**: 「optionalDependencies + bin shim」の配布パターンを 1 ターゲットで再現して理解する。
+  publish は任意（やるなら手動 1 回）。
+
+> フルマトリクス配布（全 OS/arch を CI でビルドして publish）は後回し。1 個組めれば残りは
+> "同じことを並べるだけ" なので、学習目的としては単一ターゲットで十分。
 
 ## 参考
 
