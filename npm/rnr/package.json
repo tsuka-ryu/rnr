@@ -1,0 +1,11 @@
+{
+  "name": "rnr",
+  "version": "0.1.0",
+  "description": "Rust reimplementation of nr (package.json script runner)",
+  "bin": { "rnr": "bin/rnr.js" },
+  "optionalDependencies": {
+    "@rnr/darwin-arm64": "0.1.0"
+  },
+  "files": ["bin"],
+  "license": "MIT"
+}

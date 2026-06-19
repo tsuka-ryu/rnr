@@ -45,3 +45,56 @@ Ok(status.code().unwrap_or(1))
   - 戻り値は `Result<ExitStatus, io::Error>`。失敗するのは「コマンドが見つからない」等の起動自体の失敗。`exit 7` で終わるのはエラーではない（起動は成功）。`?` で起動失敗だけ main に伝播。
 - `status.code().unwrap_or(1)` … 終了コードを Option<i32> で取得。シグナルで殺されると None になるので、その場合は慣例で 1。
 - これを main が `std::process::exit(code)` でそのまま rnr の終了コードにする = exit code 透過。
+
+## Phase 4
+
+### Q. bin shim ってなに？
+npm パッケージが「コマンド」を提供するときの入口になる小さな実行ファイル。
+package.json の `"bin": { "rnr": "bin/rnr.js" }` で、`npm i -g` 時に npm が PATH に `rnr` を貼り、それが `bin/rnr.js` を指す。ユーザーが `rnr build` と打つ → この JS が node で実行される。これが shim。
+
+shim = 「隙間に挟む詰め物」。本体の前に挟まって橋渡しだけする薄い層。
+今回は ユーザーの `rnr` と OS/arch ごとに別物の Rust バイナリ の間に挟まる:
+
+```
+rnr build → bin/rnr.js (shim) → require.resolve('@rnr/darwin-arm64/rnr') → 実バイナリを exec（exit code 透過）
+```
+
+なぜ必要か: npm パッケージは全 OS/arch 共通の1つで配るが、Rust バイナリは環境ごとに別物。
+そこで 本体 rnr は JS shim だけ持ち、各バイナリは @rnr/<os>-<arch> に分けて optionalDependencies で
+「合致する環境の1個だけ」入れる。shim が実行時に process.platform/process.arch から
+パッケージ名を決め、入ってるバイナリを探して起動する。esbuild/oxlint/swc 等の定番パターン。
+
+やってること自体は rnr の runner.rs と同じ（exec して exit code 透過）。
+「正しいバイナリを探す」部分が付くだけ。
+
+### Q. 実際はどうやって実行されるの？（npm 配布版の実行フロー）
+
+**インストール時 `npm i -g rnr`:**
+1. npm が本体 rnr の package.json を読む
+2. optionalDependencies の @rnr/<os>-<arch> を見て、各候補の os/cpu を今のマシンと照合
+3. 合致した1個だけインストール（他は optional なのでスキップ）→ node_modules が肥大化しない
+4. 配置: node_modules/rnr/bin/rnr.js（shim） と node_modules/@rnr/darwin-arm64/rnr（実バイナリ）
+5. bin 指定により npm が PATH に `rnr` コマンド（shim を指す）を作る
+
+**実行時 `rnr build`（exec が2段）:**
+```
+rnr build
+ → shell が PATH の rnr = shim(bin/rnr.js) を実行
+ → shim: process.platform+arch="darwin-arm64" → require.resolve("@rnr/darwin-arm64/rnr") で実パス解決
+ → ② spawnSync(実パス, ["build"], {stdio:'inherit'})
+ → Rust バイナリ起動: detect → scripts 読む → "pnpm run build" 組み立て(mise active なら volta ラップ無し)
+ → ③ Command::new("pnpm").args(["run","build"]).status()
+ → pnpm run build が走る
+```
+
+**exit code は逆順に全段透過:** pnpm が 7 → Rust runner が exit(7) → shim の spawnSync result.status=7 → shim が exit(7) → shell の $?=7。stdio も全段 inherit なので出力もそのまま。
+
+**cargo install 版との違い:**
+- cargo install: shim 無し。~/.cargo/bin/rnr がいきなり Rust バイナリ。exec 1段。自分用。
+- npm 配布: shim 経由で1段増える（node 起動で数十ms）。代わりに node さえあれば誰でも npm i で入る・OS/arch 自動選択。esbuild 等も同方式。
+
+### Q. shim の仕組みのドキュメントはどこ？
+単一の公式仕様は無い。npm の os/cpu/optionalDependencies/bin を組み合わせたコミュニティの定番パターン。
+- 部品の公式 doc: npm package.json の os / cpu / optionalDependencies / bin
+- 実装例（実質の教科書）: esbuild（元祖、install.js に詳しいコメント）、oxc/oxlint（PLAN の参考元、npm/ 構成）、Biome（公式 doc で明文化）、swc
+- napi-rs は .node を require する N-API アドオン方式で、rnr の「単体バイナリを spawn」方式とは別物（混同注意）

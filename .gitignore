@@ -1,1 +1,4 @@
 /target
+
+# プラットフォームパッケージに配置するビルド成果物（cargo build + コピーで都度用意）
+/npm/platforms/*/rnr
