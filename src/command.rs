@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::detect::Agent;
 
 /// Agent に対応する実行バイナリ名を返す。
@@ -40,4 +42,19 @@ pub fn wrap_volta(argv: Vec<String>, volta_available: bool, mise_active: bool) -
     } else {
         argv
     }
+}
+
+/// PATH 上に実行ファイル `name` が存在するか判定する（環境を読む impure 関数）。
+/// unix 前提（Windows の .exe 補完はしない）。
+pub fn cmd_exists(name: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path).any(|dir| Path::new(&dir).join(name).is_file())
+}
+
+/// mise が shell に activate されているか判定する。
+/// activate 時に立つ環境変数 MISE_SHELL / __MISE_DIFF の有無で判断する。
+pub fn mise_active() -> bool {
+    std::env::var_os("MISE_SHELL").is_some() || std::env::var_os("__MISE_DIFF").is_some()
 }

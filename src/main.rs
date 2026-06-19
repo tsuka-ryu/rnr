@@ -51,6 +51,13 @@ fn main() -> anyhow::Result<()> {
     // <bin> run <script> [extra...] を組み立てる。
     let argv = rnr::command::build_run_args(agent, &script, &extra);
 
+    // volta があり mise が非active なら volta run でラップする（rnr 独自）。
+    let argv = rnr::command::wrap_volta(
+        argv,
+        rnr::command::cmd_exists("volta"),
+        rnr::command::mise_active(),
+    );
+
     // --dry-run なら実行せず argv を1行表示して終了（状態は変更しない）。
     if dry_run {
         println!("{}", argv.join(" "));
