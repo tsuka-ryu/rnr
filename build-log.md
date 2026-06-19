@@ -127,5 +127,29 @@ rnr build
 - `inquire` には「候補 1 行を自分で描画するコールバック」が無い（カスタムできるのは確定後表示の `with_formatter` だけ）。
 
 → 変えられるのは「行まるごと 1 色」まで（ハイライト色・全候補 dim・見出し色など RenderConfig で可）。
-本家の行内 2 色を再現したいなら `promkit` 等へのバックエンド差し替えが必要。今回は切り詰め＋スクロール記号までで一旦区切り、
-色分けは別タスク扱いとした。
+本家の行内 2 色を再現したいなら別バックエンドへの差し替えが必要、という結論。
+
+### Q. 結局どのバックエンドに差し替えた？（市場調査の結果）
+「fuzzy 絞り込み＋行内 2 色＋なるべく小さい」で現役クレートを比較した:
+
+| 候補 | fuzzy | 行内 2 色 | サイズ | 判定 |
+|---|---|---|---|---|
+| `fuzzy-select` | nucleo | ❌（スタイル不可と明記） | 小 | 却下 |
+| `dialoguer` FuzzySelect | 内蔵 | △（`console` は ANSI 幅対応だがマッチ文字ハイライトが衝突しうる） | 中 | コード最少だが不確実 |
+| `skim`（lib） | fzf 相当 | ◎（ANSI ネイティブ） | 大（tuikit/regex 等） | 「小さい」に反し却下 |
+| **`nucleo-matcher` + `crossterm` 自前** | nucleo | ◎（完全制御） | **最小** | 採用 |
+
+`nucleo` 本体は rayon/parking_lot を引くが、マッチャだけの **`nucleo-matcher`** なら依存ほぼゼロ。描画は
+**すでに入っている `crossterm`** でやれるので新規依存は実質 1 個。`inquire` は prompt.rs の中だけに閉じていて
+外向きの口は `select_script(scripts, last) -> Result<Option<String>>` ひとつ（呼び出しは main.rs 1 箇所）
+だったので、差し替えは prompt.rs の中身を書き換えるだけで済んだ。
+
+### Q. 自前 TUI で何を実装した？
+`run_picker` に最小限のピッカーを実装（prompt.rs）:
+- `crossterm` の raw mode（`TerminalGuard` の Drop で必ず raw 解除＋カーソル復帰）
+- 1 文字ごとに `nucleo_matcher::Pattern::score` で全候補をスコアリング、降順＋同点は key 長 → key 名で安定ソート
+  （本家 fzf の `byLengthAsc` 相当）。query 空なら元順（last ピン留め済み）
+- 描画は stderr に「見出し / 候補 `PAGE_SIZE`=7 行 / ヘルプ」を書き、前フレーム行数ぶん `MoveUp`＋`Clear` で再描画
+- 行内 2 色: スクリプト名は通常色（選択中はシアン＋`❯`）、コマンドは `DarkGrey`。コマンドは
+  `"❯ " + key + " "` を引いた残り幅に `limit_text` で切り詰め（折り返し防止）
+- ↑↓ で移動（端ではスクロール矢印 `↑`/`↓`）、Enter で確定、Esc / Ctrl-C で `None`（キャンセル）
