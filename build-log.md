@@ -153,3 +153,31 @@ rnr build
 - 行内 2 色: スクリプト名は通常色（選択中はシアン＋`❯`）、コマンドは `DarkGrey`。コマンドは
   `"❯ " + key + " "` を引いた残り幅に `limit_text` で切り詰め（折り返し防止）
 - ↑↓ で移動（端ではスクロール矢印 `↑`/`↓`）、Enter で確定、Esc / Ctrl-C で `None`（キャンセル）
+
+## Phase N — ni（インストール系）
+
+### Q. 本家 ni も busybox 方式（symlink + argv[0] 分岐）なの？
+**違う。本家 ni は busybox 方式ではないし、自分で `ln` もしていない。** PLAN-NI.md に
+「本家 ni は … シンボリックリンクで配り、argv[0] で振る舞いを変える（busybox 方式）」とあるが、
+これは実態と食い違っている（調べた結果の訂正メモ）。
+
+本家 ni（`antfu-collective/ni`）の実態:
+- package.json の `bin` が **コマンドごとに別ファイル**を指す（`ni`→`bin/ni.mjs` / `nci`→`bin/nci.mjs` / …）
+- 各シムは 57 バイトの薄い JS で、中身は `import '../dist/ni.mjs'` だけ。入口が物理的に別で、**argv[0] 分岐はしていない**
+- → PLAN-NI.md でいう「`[[bin]]` 複数方式」そのもの
+
+`ln`（symlink）しているのは ni 自身ではなく **パッケージマネージャ**。`npm i -g @antfu/ni` 時に
+npm が `bin` の各エントリぶん global bin に symlink を貼る（`bin/ni → …/bin/ni.mjs` 等）。
+複数 symlink はできるが **それぞれ別の実体**を指す。1 実体に全名前を向けて argv[0] で分ける
+busybox とは別物。
+
+| | 実体 | 分岐方法 |
+| --- | --- | --- |
+| busybox | 1 バイナリ | `argv[0]` |
+| 本家 ni | コマンドごとに別シム（→共有 dist） | 入口が別（分岐なし） |
+| rnr | 1 バイナリ | `argv[0]`（busybox） |
+
+ni が「別ファイル方式」で平気なのは、シムが 57 バイトの JS で実ロジックは `dist` 共有だから
+増えても痛くないため。rnr は Rust で各 `[[bin]]` が**本物のバイナリ**になり容量が増えるので
+busybox にした。**busybox を選んだ判断自体は妥当だが、「本家に忠実だから」という根拠は成り立たない**
+（本家は argv[0] 分岐をしていない）。

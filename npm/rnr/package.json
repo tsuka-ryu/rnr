@@ -2,7 +2,7 @@
   "name": "rnr",
   "version": "0.1.0",
   "description": "Rust reimplementation of nr (package.json script runner)",
-  "bin": { "rnr": "bin/rnr.js" },
+  "bin": { "rnr": "bin/rnr.js", "rni": "bin/rni.js", "rnci": "bin/rnci.js" },
   "optionalDependencies": {
     "@rnr/darwin-arm64": "0.1.0"
   },
