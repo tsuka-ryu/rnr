@@ -43,11 +43,11 @@ pub fn select_script(
             haystack: format!("{key} {command}"),
         })
         .collect();
-    if let Some(last) = last
-        && let Some(pos) = items.iter().position(|it| it.key == last)
-    {
-        let item = items.remove(pos);
-        items.insert(0, item);
+    if let Some(last) = last {
+        if let Some(pos) = items.iter().position(|it| it.key == last) {
+            let item = items.remove(pos);
+            items.insert(0, item);
+        }
     }
 
     let selected = run_picker(&items)?;
