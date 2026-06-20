@@ -3,7 +3,8 @@ use std::path::Path;
 use crate::detect::Agent;
 
 /// Agent に対応する実行バイナリ名を返す。
-fn agent_bin(agent: Agent) -> &'static str {
+/// nr（build_run_args）と ni（build_install_args）の両方から使うので crate 公開。
+pub(crate) fn agent_bin(agent: Agent) -> &'static str {
     match agent {
         Agent::Npm => "npm",
         Agent::Pnpm => "pnpm",
